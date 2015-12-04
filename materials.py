@@ -63,71 +63,11 @@ class Group(object):
         
 
 
-def make_fresnel_v1():
-    """ This is the custom Fresnel group node based on the first tutorial
-        video about fresnel and non-metals https://www.youtube.com/watch?v=pNiVB7tRG68
-    """
-
-    betterFresnel = Group('BetterFresnel')
-    #setup group inputs
-    roughness_in = betterFresnel.inputs.new('NodeSocketFloatFactor','Roughness')
-    roughness_in.default_value = 0.01
-    roughness_in.min_value = 0
-    roughness_in.max_value = 1
-    ior_in = betterFresnel.inputs.new('NodeSocketFloatFactor','IOR')
-    ior_in.default_value = 1.45
-    ior_in.min_value = 0
-    ior_in.max_value = 1000
-    normal_in = betterFresnel.inputs.new('NodeSocketVector','Normal')
-    normal_in.default_value = (0,0,0)
-    normal_in.min_value = -1
-    normal_in.max_value = 1
-
-    #group outputs
-    fac_out = betterFresnel.outputs.new('NodeSocketFloatFactor','Fac')
-    fac_out.default_value = 0
-    fac_out.min_value = 0
-    fac_out.max_value = 1
-
-    #group nodes
-    bump = betterFresnel.nodes.new('ShaderNodeBump')
-    geo = betterFresnel.nodes.new('ShaderNodeNewGeometry')
-    mix = betterFresnel.nodes.new('ShaderNodeMixRGB')
-    fresnel = betterFresnel.nodes.new('ShaderNodeFresnel')
-
-    #connect 'em all
-    betterFresnel.links.new(betterFresnel.input_node.outputs['Roughness'],mix.inputs['Fac'])
-    betterFresnel.links.new(betterFresnel.input_node.outputs['Normal'],bump.inputs['Normal'])
-    betterFresnel.links.new(betterFresnel.input_node.outputs['IOR'],fresnel.inputs['IOR'])
-    betterFresnel.links.new(geo.outputs['Incoming'],mix.inputs['Color2'])
-    betterFresnel.links.new(bump.outputs['Normal'],mix.inputs['Color1'])
-    betterFresnel.links.new(mix.outputs['Color'],fresnel.inputs['Normal'])
-    betterFresnel.links.new(fresnel.outputs['Fac'],betterFresnel.output_node.inputs['Fac'])
-
-
-    bump.inputs['Strength'].default_value = 0
-
-    #prettify and arrange graph
-    simplify_node(geo)
-    simplify_node(bump)
-    betterFresnel.input_node.location = (-564,203)
-    bump.location = (-401,127)
-    geo.location = (-433,79)
-    mix.location = (-289,127)
-    fresnel.location = (-150,147)
-    betterFresnel.output_node.location = (-27, 167)
-
-    bump.hide = True
-    mix.hide = True
-    fresnel.hide = True
-
-    return betterFresnel
-
-def make_fresnel_v2_metal():
+def make_fresnel():
     """ Includes properties for rim lighting, but not as good with glass
         (from about 7:50 mark on https://www.youtube.com/watch?v=FeH-g9bGz_4)
     """
-    betterFresnel = Group('BetterFresnel-Metal')
+    betterFresnel = Group('BetterFresnel')
 
     #setup group inputs
     roughness_in = betterFresnel.inputs.new('NodeSocketFloatFactor','Roughness')
@@ -143,11 +83,11 @@ def make_fresnel_v2_metal():
     ior_in.min_value = 0
     ior_in.max_value = 1000
     #group outputs
-    fac_out = betterFresnel.outputs.new('NodeSocketFloatFactor','Fac')
+    fac_out = betterFresnel.outputs.new('NodeSocketFloatFactor','Fresnel')
     fac_out.default_value = 0
     fac_out.min_value = 0
     fac_out.max_value = 1
-    facing_out = betterFresnel.outputs.new('NodeSocketFloat','Facing')
+    facing_out = betterFresnel.outputs.new('NodeSocketFloat','Rim')
     facing_out.default_value = 0
     facing_out.min_value = 0
     facing_out.max_value = 1
@@ -167,10 +107,10 @@ def make_fresnel_v2_metal():
     betterFresnel.links.new(geo.outputs['Incoming'],mix.inputs['Color2'])
     betterFresnel.links.new(bump.outputs['Normal'],mix.inputs['Color1'])
     betterFresnel.links.new(mix.outputs['Color'],fresnel.inputs['Normal'])
-    betterFresnel.links.new(fresnel.outputs['Fac'],betterFresnel.output_node.inputs['Fac'])
+    betterFresnel.links.new(fresnel.outputs['Fac'],betterFresnel.output_node.inputs['Fresnel'])
     betterFresnel.links.new(mix.outputs['Color'],weight.inputs['Normal'])
     betterFresnel.links.new(weight.outputs['Facing'],pow.inputs[0])
-    betterFresnel.links.new(pow.outputs['Value'],betterFresnel.output_node.inputs['Facing'])
+    betterFresnel.links.new(pow.outputs['Value'],betterFresnel.output_node.inputs['Rim'])
 
 
     bump.inputs['Strength'].default_value = 0
@@ -197,89 +137,14 @@ def make_fresnel_v2_metal():
 
     return betterFresnel
 
-def make_fresnel_v3_specular():
-    """ from https://www.youtube.com/watch?v=S2VLJZ_Zaz0 at about 3 min mark
-        Where F0 is darkest value: (Fresnel - F0)/(1 - F0)
-    """
-    betterFresnel = Group('BetterFresnel-Specular')
-    #setup group inputs
-    roughness_in = betterFresnel.inputs.new('NodeSocketFloatFactor','Roughness')
-    roughness_in.default_value = 0.01
-    roughness_in.min_value = 0
-    roughness_in.max_value = 1
-    ior_in = betterFresnel.inputs.new('NodeSocketFloatFactor','IOR')
-    ior_in.default_value = 1.45
-    ior_in.min_value = 0
-    ior_in.max_value = 1000
-    normal_in = betterFresnel.inputs.new('NodeSocketVector','Normal')
-    normal_in.default_value = (0,0,0)
-    normal_in.min_value = -1
-    normal_in.max_value = 1
-
-    #group outputs
-    fac_out = betterFresnel.outputs.new('NodeSocketFloatFactor','Fac')
-    fac_out.default_value = 0
-    fac_out.min_value = 0
-    fac_out.max_value = 1
-
-    #group nodes
-    bump = betterFresnel.nodes.new('ShaderNodeBump')
-    geo = betterFresnel.nodes.new('ShaderNodeNewGeometry')
-    mix = betterFresnel.nodes.new('ShaderNodeMixRGB')
-    fresnel = betterFresnel.nodes.new('ShaderNodeFresnel')
-    f0 = betterFresnel.nodes.new('ShaderNodeFresnel')
-    sub = betterFresnel.nodes.new('ShaderNodeMath')
-    sub2 = betterFresnel.nodes.new('ShaderNodeMath')
-    div = betterFresnel.nodes.new('ShaderNodeMath')
-
-    sub.operation = 'SUBTRACT'
-    sub2.operation = 'SUBTRACT'
-    div.operation = 'DIVIDE'
-
-    #connect 'em all
-    betterFresnel.links.new(betterFresnel.input_node.outputs['Roughness'],mix.inputs['Fac'])
-    betterFresnel.links.new(betterFresnel.input_node.outputs['Normal'],bump.inputs['Normal'])
-    betterFresnel.links.new(betterFresnel.input_node.outputs['IOR'],fresnel.inputs['IOR'])
-    betterFresnel.links.new(geo.outputs['Incoming'],mix.inputs['Color2'])
-    betterFresnel.links.new(bump.outputs['Normal'],mix.inputs['Color1'])
-    betterFresnel.links.new(mix.outputs['Color'],fresnel.inputs['Normal'])
-    betterFresnel.links.new(geo.outputs['Incoming'],f0.inputs['Normal'])
-    betterFresnel.links.new(betterFresnel.input_node.outputs['IOR'],f0.inputs['IOR'])
-    betterFresnel.links.new(fresnel.outputs['Fac'],sub.inputs[0])
-    betterFresnel.links.new(f0.outputs['Fac'],sub.inputs[1])
-    betterFresnel.links.new(f0.outputs['Fac'],sub2.inputs[1])
-    betterFresnel.links.new(sub.outputs['Value'],div.inputs[0])
-    betterFresnel.links.new(sub2.outputs['Value'],div.inputs[1])
-    betterFresnel.links.new(div.outputs['Value'],betterFresnel.output_node.inputs['Fac'])
-
-
-    bump.inputs['Strength'].default_value = 0
-    sub2.inputs[0].default_value = 1
-
-    #prettify and arrange graph
-    simplify_node(geo)
-    simplify_node(bump)
-    betterFresnel.input_node.location = (-564,203)
-    bump.location = (-401,127)
-    geo.location = (-433,79)
-    mix.location = (-289,127)
-    fresnel.location = (-150,147)
-    betterFresnel.output_node.location = (-27, 167)
-
-    bump.hide = True
-    mix.hide = True
-    fresnel.hide = True
-
-    return betterFresnel
-
-def make_fresnel_v4_specular_metal():
+def make_fresnel_f0():
     """ from https://www.youtube.com/watch?v=S2VLJZ_Zaz0 at about 10:20 min mark
         Where F0 is darkest value: (Fresnel - F0)/(1 - F0) + metallic rim shading
 
         to use: plug fresnel output into RGB Mix Fac, color1 is specular color, make c2 white
         then plug output color into glossy shader for a metal
     """
-    betterFresnel = Group('BetterFresnel-Specular-Metal')
+    betterFresnel = Group('BetterFresnel-F0')
     #setup group inputs
     roughness_in = betterFresnel.inputs.new('NodeSocketFloatFactor','Roughness')
     roughness_in.default_value = 0.01
@@ -289,6 +154,10 @@ def make_fresnel_v4_specular_metal():
     normal_in.default_value = (0,0,0)
     normal_in.min_value = -1
     normal_in.max_value = 1
+    ior_in = betterFresnel.inputs.new('NodeSocketFloatFactor','IOR')
+    ior_in.default_value = 1.45
+    ior_in.min_value = 0
+    ior_in.max_value = 1000
 
     #group outputs
     fac_out = betterFresnel.outputs.new('NodeSocketFloatFactor','Fresnel')
@@ -312,7 +181,6 @@ def make_fresnel_v4_specular_metal():
     div = betterFresnel.nodes.new('ShaderNodeMath')
     weight = betterFresnel.nodes.new('ShaderNodeLayerWeight')
     pow = betterFresnel.nodes.new('ShaderNodeMath')
-    ior = betterFresnel.nodes.new('ShaderNodeValue')
 
 
     sub.operation = 'SUBTRACT'
@@ -323,12 +191,12 @@ def make_fresnel_v4_specular_metal():
     #connect 'em all
     betterFresnel.links.new(betterFresnel.input_node.outputs['Roughness'],mix.inputs['Fac'])
     betterFresnel.links.new(betterFresnel.input_node.outputs['Normal'],bump.inputs['Normal'])
-    betterFresnel.links.new(ior.outputs['Value'],fresnel.inputs['IOR'])
+    betterFresnel.links.new(betterFresnel.input_node.outputs['IOR'],fresnel.inputs['IOR'])
     betterFresnel.links.new(geo.outputs['Incoming'],mix.inputs['Color2'])
     betterFresnel.links.new(bump.outputs['Normal'],mix.inputs['Color1'])
     betterFresnel.links.new(mix.outputs['Color'],fresnel.inputs['Normal'])
     betterFresnel.links.new(geo.outputs['Incoming'],f0.inputs['Normal'])
-    betterFresnel.links.new(ior.outputs['Value'],f0.inputs['IOR'])
+    betterFresnel.links.new(betterFresnel.input_node.outputs['IOR'],f0.inputs['IOR'])
     betterFresnel.links.new(fresnel.outputs['Fac'],sub.inputs[0])
     betterFresnel.links.new(f0.outputs['Fac'],sub.inputs[1])
     betterFresnel.links.new(f0.outputs['Fac'],sub2.inputs[1])
@@ -344,7 +212,6 @@ def make_fresnel_v4_specular_metal():
     bump.inputs['Strength'].default_value = 0
     sub2.inputs[0].default_value = 1
     pow.inputs[1].default_value = 2.5
-    ior.outputs[0].default_value = 1.450
 
 
     #prettify and arrange graph
@@ -430,7 +297,7 @@ def make_reflection_adv():
     mix = reflect.nodes.new('ShaderNodeMixShader')
     fresnel = reflect.nodes.new('ShaderNodeGroup')
 
-    fresnel.node_tree = bpy.data.node_groups['BetterFresnel-Specular-Metal']
+    fresnel.node_tree = bpy.data.node_groups['BetterFresnel-F0']
 
     reflect.links.new(reflect.input_node.outputs['Shader'],mix.inputs[1])
     reflect.links.new(reflect.input_node.outputs['Roughness'],fresnel.inputs['Roughness'])
@@ -525,8 +392,8 @@ def make_metal_adv():
     metal.links.new(metal.input_node.outputs['Normal'],gloss.inputs['Normal'])
     metal.links.new(metal.input_node.outputs['Color'],rim_mix.inputs['Color1'])
     metal.links.new(metal.input_node.outputs['Rim'],rim_mix.inputs['Color2'])
-    metal.links.new(fresnel.outputs['Facing'],rim_mix.inputs['Fac'])
-    metal.links.new(fresnel.outputs['Fac'],mix.inputs['Fac'])
+    metal.links.new(fresnel.outputs['Rim'],rim_mix.inputs['Fac'])
+    metal.links.new(fresnel.outputs['Fresnel'],mix.inputs['Fac'])
     metal.links.new(rim_mix.outputs['Color'],mix.inputs['Color1'])
     metal.links.new(mix.outputs['Color'],gloss.inputs['Color'])
     metal.links.new(metal.output_node.inputs['BSDF'],gloss.outputs['BSDF'])
@@ -575,10 +442,8 @@ def make_metal_specular():
     mix.inputs['Color2'].default_value = (1,1,1,1)
 
 def make_groups():
-    make_fresnel_v1()
-    make_fresnel_v2_metal()
-    make_fresnel_v3_specular()
-    make_fresnel_v4_specular_metal()
+    make_fresnel()
+    make_fresnel_f0()
     make_reflection()
     make_reflection_adv()
     make_metal_basic()
