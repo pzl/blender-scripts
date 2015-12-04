@@ -212,6 +212,7 @@ def make_fresnel_f0():
     bump.inputs['Strength'].default_value = 0
     sub2.inputs[0].default_value = 1
     pow.inputs[1].default_value = 2.5
+    f0.label = "F0"
 
 
     #prettify and arrange graph
@@ -222,11 +223,23 @@ def make_fresnel_f0():
     geo.location = (-433,79)
     mix.location = (-289,127)
     fresnel.location = (-150,147)
-    betterFresnel.output_node.location = (-27, 167)
+    f0.location = (-150,103)
+    weight.location = (-145,51)
+    pow.location = (-25,45)
+    sub.location = (-31,142)
+    sub2.location = (-28,104)
+    div.location = (98,121)
+    betterFresnel.output_node.location = (250, 137)
 
     bump.hide = True
     mix.hide = True
     fresnel.hide = True
+    f0.hide = True
+    weight.hide = True
+    pow.hide = True
+    sub.hide = True
+    sub2.hide = True
+    div.hide = True
 
     return betterFresnel
 
