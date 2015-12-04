@@ -327,53 +327,16 @@ def make_reflection():
     mixcolor.inputs['Color2'].default_value = (1,1,1,1)
 
 
-def make_metal_basic():
-    """ Basically just fresnel and glossy. Does not have rim lighting.
-        From early point (up to about 6 min mark) on https://www.youtube.com/watch?v=FeH-g9bGz_4
+def make_metal(fresnel_use_f0=False):
+    """ Includes rim lighting. 
+        From https://www.youtube.com/watch?v=FeH-g9bGz_4 after 6 min mark
+        also https://www.youtube.com/watch?v=S2VLJZ_Zaz0 at 14:20
     """
-
-    metal = Group('Metal Basic')
-
-    metal.outputs.new('NodeSocketShader','BSDF')
-    metal.inputs.new('NodeSocketColor','Color')
-    #setup group inputs
-    roughness_in = metal.inputs.new('NodeSocketFloatFactor','Roughness')
-    roughness_in.default_value = 0.01
-    roughness_in.min_value = 0
-    roughness_in.max_value = 1
-    ior_in = metal.inputs.new('NodeSocketFloatFactor','IOR')
-    ior_in.default_value = 1.45
-    ior_in.min_value = 0
-    ior_in.max_value = 1000
-    normal_in = metal.inputs.new('NodeSocketVector','Normal')
-    normal_in.default_value = (0,0,0)
-    normal_in.min_value = -1
-    normal_in.max_value = 1
-
-    gloss = metal.nodes.new('ShaderNodeBsdfGlossy')
-    mix = metal.nodes.new('ShaderNodeMixRGB')
-    fresnel = metal.nodes.new('ShaderNodeGroup')
-    fresnel.node_tree = bpy.data.node_groups['BetterFresnel']
-
-    metal.links.new(metal.input_node.outputs['Roughness'],fresnel.inputs['Roughness'])
-    metal.links.new(metal.input_node.outputs['IOR'],fresnel.inputs['IOR'])    
-    metal.links.new(metal.input_node.outputs['Normal'],fresnel.inputs['Normal'])
-    metal.links.new(metal.input_node.outputs['Roughness'],gloss.inputs['Roughness'])    
-    metal.links.new(metal.input_node.outputs['Normal'],gloss.inputs['Normal'])
-    metal.links.new(metal.input_node.outputs['Color'],mix.inputs['Color1'])
-    metal.links.new(fresnel.outputs['Fac'],mix.inputs['Fac'])
-    metal.links.new(mix.outputs['Color'],gloss.inputs['Color'])
-    metal.links.new(metal.output_node.inputs['BSDF'],gloss.outputs['BSDF'])
-
-    mix.inputs['Color2'].default_value = (1,1,1,1)
+    fresnel_group = 'BetterFresnel-F0' if fresnel_use_f0 else 'BetterFresnel'
+    group_name = 'Metal F0' if fresnel_use_f0 else 'Metal'
 
 
-def make_metal_adv():
-    """ Includes rim lighting. From https://www.youtube.com/watch?v=FeH-g9bGz_4 
-        after 6 min mark
-    """
-
-    metal = Group('Metal')
+    metal = Group(group_name)
 
     metal.outputs.new('NodeSocketShader','BSDF')
     metal.inputs.new('NodeSocketColor','Color')
@@ -396,7 +359,7 @@ def make_metal_adv():
     mix = metal.nodes.new('ShaderNodeMixRGB')
     rim_mix = metal.nodes.new('ShaderNodeMixRGB')
     fresnel = metal.nodes.new('ShaderNodeGroup')
-    fresnel.node_tree = bpy.data.node_groups['BetterFresnel-Metal']
+    fresnel.node_tree = bpy.data.node_groups[fresnel_group]
 
     metal.links.new(metal.input_node.outputs['Roughness'],fresnel.inputs['Roughness'])
     metal.links.new(metal.input_node.outputs['IOR'],fresnel.inputs['IOR'])    
@@ -414,53 +377,14 @@ def make_metal_adv():
     mix.inputs['Color2'].default_value = (1,1,1,1)
 
 
-def make_metal_specular():
-    """ Metal with rim shading, without IOR, using specular
-        from https://www.youtube.com/watch?v=S2VLJZ_Zaz0 at 14:20
-    """
-
-    metal = Group('Metal-Specular')
-
-    metal.outputs.new('NodeSocketShader','BSDF')
-    metal.inputs.new('NodeSocketColor','Color')
-    metal.inputs.new('NodeSocketColor','Rim')
-    #setup group inputs
-    roughness_in = metal.inputs.new('NodeSocketFloatFactor','Roughness')
-    roughness_in.default_value = 0.01
-    roughness_in.min_value = 0
-    roughness_in.max_value = 1
-    normal_in = metal.inputs.new('NodeSocketVector','Normal')
-    normal_in.default_value = (0,0,0)
-    normal_in.min_value = -1
-    normal_in.max_value = 1
-
-    gloss = metal.nodes.new('ShaderNodeBsdfGlossy')
-    mix = metal.nodes.new('ShaderNodeMixRGB')
-    rim_mix = metal.nodes.new('ShaderNodeMixRGB')
-    fresnel = metal.nodes.new('ShaderNodeGroup')
-    fresnel.node_tree = bpy.data.node_groups['BetterFresnel-Specular-Metal']
-
-    metal.links.new(metal.input_node.outputs['Roughness'],fresnel.inputs['Roughness'])
-    metal.links.new(metal.input_node.outputs['Normal'],fresnel.inputs['Normal'])
-    metal.links.new(metal.input_node.outputs['Roughness'],gloss.inputs['Roughness'])  
-    metal.links.new(metal.input_node.outputs['Normal'],gloss.inputs['Normal'])
-    metal.links.new(metal.input_node.outputs['Color'],rim_mix.inputs['Color1'])
-    metal.links.new(metal.input_node.outputs['Rim'],rim_mix.inputs['Color2'])
-    metal.links.new(fresnel.outputs['Facing'],rim_mix.inputs['Fac'])
-    metal.links.new(fresnel.outputs['Fac'],mix.inputs['Fac'])
-    metal.links.new(rim_mix.outputs['Color'],mix.inputs['Color1'])
-    metal.links.new(mix.outputs['Color'],gloss.inputs['Color'])
-    metal.links.new(metal.output_node.inputs['BSDF'],gloss.outputs['BSDF'])
-
-    mix.inputs['Color2'].default_value = (1,1,1,1)
 
 def make_groups():
     make_fresnel()
     make_fresnel_f0()
     make_reflection()
     make_reflection_ior()
-    make_metal_adv()
-    make_metal_specular()
+    make_metal()
+    make_metal(fresnel_use_f0=True)
 
 
 make_groups()
