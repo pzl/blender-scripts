@@ -81,7 +81,7 @@ def make_fresnel():
     ior_in = betterFresnel.inputs.new('NodeSocketFloatFactor','IOR')
     ior_in.default_value = 1.45
     ior_in.min_value = 0
-    ior_in.max_value = 1000
+    ior_in.max_value = 5
     #group outputs
     fac_out = betterFresnel.outputs.new('NodeSocketFloatFactor','Fresnel')
     fac_out.default_value = 0
@@ -157,7 +157,7 @@ def make_fresnel_f0():
     ior_in = betterFresnel.inputs.new('NodeSocketFloatFactor','IOR')
     ior_in.default_value = 1.45
     ior_in.min_value = 0
-    ior_in.max_value = 1000
+    ior_in.max_value = 5
 
     #group outputs
     fac_out = betterFresnel.outputs.new('NodeSocketFloatFactor','Fresnel')
@@ -258,7 +258,7 @@ def make_reflection_ior():
     ior_in = reflect.inputs.new('NodeSocketFloatFactor','IOR')
     ior_in.default_value = 1.45
     ior_in.min_value = 0
-    ior_in.max_value = 1000
+    ior_in.max_value = 5
     normal_in = reflect.inputs.new('NodeSocketVector','Normal')
     normal_in.default_value = (0,0,0)
     normal_in.min_value = -1
@@ -349,7 +349,7 @@ def make_metal(fresnel_use_f0=False):
     ior_in = metal.inputs.new('NodeSocketFloatFactor','IOR')
     ior_in.default_value = 1.45
     ior_in.min_value = 0
-    ior_in.max_value = 1000
+    ior_in.max_value = 5
     normal_in = metal.inputs.new('NodeSocketVector','Normal')
     normal_in.default_value = (0,0,0)
     normal_in.min_value = -1
