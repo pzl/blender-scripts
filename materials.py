@@ -244,9 +244,9 @@ def make_fresnel_f0():
     return betterFresnel
 
 
-def make_reflection():
+def make_reflection_ior():
     """Can be added to basically make a clear coat"""
-    reflect = Group('Reflection')
+    reflect = Group('Reflection IOR')
 
     reflect.inputs.new('NodeSocketShader','Shader')
     reflect.outputs.new('NodeSocketShader','Shader')
@@ -279,14 +279,14 @@ def make_reflection():
     reflect.links.new(reflect.input_node.outputs['Normal'],gloss.inputs['Normal'])
     reflect.links.new(gloss.outputs['BSDF'],mix.inputs[2])
     reflect.links.new(mix.outputs['Shader'],reflect.output_node.inputs['Shader'])
-    reflect.links.new(fresnel.outputs['Fac'],mix.inputs['Fac'])
+    reflect.links.new(fresnel.outputs['Fresnel'],mix.inputs['Fac'])
 
-def make_reflection_adv():
+def make_reflection():
     """ Adds less-physically correct, but nice, specular setting
         from https://www.youtube.com/watch?v=S2VLJZ_Zaz0 about 14min mark
     """
 
-    reflect = Group('Reflection Adv')
+    reflect = Group('Reflection')
 
     reflect.inputs.new('NodeSocketShader','Shader')
     reflect.outputs.new('NodeSocketShader','Shader')
@@ -458,8 +458,7 @@ def make_groups():
     make_fresnel()
     make_fresnel_f0()
     make_reflection()
-    make_reflection_adv()
-    make_metal_basic()
+    make_reflection_ior()
     make_metal_adv()
     make_metal_specular()
 
