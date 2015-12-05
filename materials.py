@@ -378,6 +378,79 @@ def make_metal(fresnel_use_f0=False):
 
 
 
+def make_glass():
+    glass = Group('Glass')
+
+    glass.outputs.new('NodeSocketShader','BSDF')
+
+    color_in = glass.inputs.new('NodeSocketColor','Color')
+    color_in.default_value = (1,1,1,1)
+    roughness_in = glass.inputs.new('NodeSocketFloatFactor','Roughness')
+    roughness_in.default_value = 0.01
+    roughness_in.min_value = 0
+    roughness_in.max_value = 1
+    ior_in = glass.inputs.new('NodeSocketFloatFactor','IOR')
+    ior_in.default_value = 1.45
+    ior_in.min_value = 0
+    ior_in.max_value = 5
+    roughness_in = glass.inputs.new('NodeSocketFloatFactor','Specular')
+    roughness_in.default_value = 0.01
+    roughness_in.min_value = 0
+    roughness_in.max_value = 1
+    normal_in = glass.inputs.new('NodeSocketVector','Normal')
+    normal_in.default_value = (0,0,0)
+    normal_in.min_value = -1
+    normal_in.max_value = 1
+
+    refract = glass.nodes.new('ShaderNodeBsdfRefraction')
+    reflect = glass.nodes.new('ShaderNodeGroup')
+    reflect.node_tree = bpy.data.node_groups['Reflection']
+
+    glass.links.new(glass.input_node.outputs['Color'],refract.inputs['Color'])
+    glass.links.new(glass.input_node.outputs['Roughness'],refract.inputs['Roughness'])
+    glass.links.new(glass.input_node.outputs['IOR'],refract.inputs['IOR'])
+    glass.links.new(glass.input_node.outputs['Normal'],refract.inputs['Normal'])
+    glass.links.new(refract.outputs['BSDF'],reflect.inputs['Shader'])
+    glass.links.new(glass.input_node.outputs['Roughness'],reflect.inputs['Roughness'])
+    glass.links.new(glass.input_node.outputs['Specular'],reflect.inputs['Specular'])
+    glass.links.new(glass.input_node.outputs['Normal'],reflect.inputs['Normal'])
+    glass.links.new(reflect.outputs['Shader'],glass.output_node.inputs['BSDF'])
+
+
+def make_dielectric():
+    diel = Group('Dielectric')
+
+    diel.outputs.new('NodeSocketShader','BSDF')
+
+    color_in = diel.inputs.new('NodeSocketColor','Color')
+    color_in.default_value = (1,1,1,1)
+    roughness_in = diel.inputs.new('NodeSocketFloatFactor','Roughness')
+    roughness_in.default_value = 0.01
+    roughness_in.min_value = 0
+    roughness_in.max_value = 1
+    roughness_in = diel.inputs.new('NodeSocketFloatFactor','Specular')
+    roughness_in.default_value = 0.01
+    roughness_in.min_value = 0
+    roughness_in.max_value = 1
+    normal_in = diel.inputs.new('NodeSocketVector','Normal')
+    normal_in.default_value = (0,0,0)
+    normal_in.min_value = -1
+    normal_in.max_value = 1
+
+    diffuse = diel.nodes.new('ShaderNodeBsdfDiffuse')
+    reflect = diel.nodes.new('ShaderNodeGroup')
+    reflect.node_tree = bpy.data.node_groups['Reflection']
+
+    diel.links.new(diel.input_node.outputs['Color'],diffuse.inputs['Color'])
+    diel.links.new(diel.input_node.outputs['Roughness'],diffuse.inputs['Roughness'])
+    diel.links.new(diel.input_node.outputs['Normal'],diffuse.inputs['Normal'])
+    diel.links.new(diffuse.outputs['BSDF'],reflect.inputs['Shader'])
+    diel.links.new(diel.input_node.outputs['Roughness'],reflect.inputs['Roughness'])
+    diel.links.new(diel.input_node.outputs['Specular'],reflect.inputs['Specular'])
+    diel.links.new(diel.input_node.outputs['Normal'],reflect.inputs['Normal'])
+    diel.links.new(reflect.outputs['Shader'],diel.output_node.inputs['BSDF'])
+
+
 def make_groups():
     make_fresnel()
     make_fresnel_f0()
@@ -385,6 +458,8 @@ def make_groups():
     make_reflection_ior()
     make_metal()
     make_metal(fresnel_use_f0=True)
+    make_glass()
+    make_dielectric()
 
 
 make_groups()
