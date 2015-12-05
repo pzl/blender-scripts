@@ -67,7 +67,7 @@ def make_fresnel():
     """ Includes properties for rim lighting, but not as good with glass
         (from about 7:50 mark on https://www.youtube.com/watch?v=FeH-g9bGz_4)
     """
-    betterFresnel = Group('BetterFresnel')
+    betterFresnel = Group('Fresnel')
 
     #setup group inputs
     roughness_in = betterFresnel.inputs.new('NodeSocketFloatFactor','Roughness')
@@ -144,7 +144,7 @@ def make_fresnel_f0():
         to use: plug fresnel output into RGB Mix Fac, color1 is specular color, make c2 white
         then plug output color into glossy shader for a metal
     """
-    betterFresnel = Group('BetterFresnel-F0')
+    betterFresnel = Group('Fresnel-F0')
     #setup group inputs
     roughness_in = betterFresnel.inputs.new('NodeSocketFloatFactor','Roughness')
     roughness_in.default_value = 0.01
@@ -269,7 +269,7 @@ def make_reflection_ior():
     mix = reflect.nodes.new('ShaderNodeMixShader')
     fresnel = reflect.nodes.new('ShaderNodeGroup')
 
-    fresnel.node_tree = bpy.data.node_groups['BetterFresnel']
+    fresnel.node_tree = bpy.data.node_groups['Fresnel']
 
     reflect.links.new(reflect.input_node.outputs['Shader'],mix.inputs[1])
     reflect.links.new(reflect.input_node.outputs['Roughness'],fresnel.inputs['Roughness'])
@@ -310,7 +310,7 @@ def make_reflection():
     mix = reflect.nodes.new('ShaderNodeMixShader')
     fresnel = reflect.nodes.new('ShaderNodeGroup')
 
-    fresnel.node_tree = bpy.data.node_groups['BetterFresnel-F0']
+    fresnel.node_tree = bpy.data.node_groups['Fresnel-F0']
 
     reflect.links.new(reflect.input_node.outputs['Shader'],mix.inputs[1])
     reflect.links.new(reflect.input_node.outputs['Roughness'],fresnel.inputs['Roughness'])
@@ -332,7 +332,7 @@ def make_metal(fresnel_use_f0=False):
         From https://www.youtube.com/watch?v=FeH-g9bGz_4 after 6 min mark
         also https://www.youtube.com/watch?v=S2VLJZ_Zaz0 at 14:20
     """
-    fresnel_group = 'BetterFresnel-F0' if fresnel_use_f0 else 'BetterFresnel'
+    fresnel_group = 'Fresnel-F0' if fresnel_use_f0 else 'Fresnel'
     group_name = 'Metal F0' if fresnel_use_f0 else 'Metal'
 
 
