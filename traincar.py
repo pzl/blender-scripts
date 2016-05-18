@@ -54,7 +54,7 @@ class TrainCarAdd(bpy.types.Operator):
 
 	derail = bpy.props.BoolProperty(
 		name="Derail",
-		default=True,
+		default=False,
 		description="Whether keyframe-controlled movement stops and rigid body physics takes over",
 	)
 	derail_collective = bpy.props.BoolProperty(
@@ -65,7 +65,7 @@ class TrainCarAdd(bpy.types.Operator):
 
 	derail_at = bpy.props.EnumProperty(
 		items=(
-			('OBJ',"Object","Train derails at object center (e.g. an empty)",'OBJECT_DATA',1),
+			('OBJ',"Object","Train derails at an object",'OBJECT_DATA',1),
 			('LOC',"Location","Train derails at manually entered location",'AXIS_SIDE',2),
 			('FRAME',"Frame","Train derails at specific frame",'TIME',3),
 		),
@@ -74,10 +74,17 @@ class TrainCarAdd(bpy.types.Operator):
 	)
 
 	derail_obj = bpy.props.StringProperty(
-		name="Derail At",
+		name="Object",
 		description="Derail train at this object's location"
 	)
-
+	derail_obj_type = bpy.props.EnumProperty(
+		items=(
+			('BOUND',"Bounds","Train derails as it is inside object's bounds",'MOD_SUBSURF',1),
+			('LOC',"Center","Train derails when it is very close to object's center (location)",'MANIPUL',2),
+		),
+		name='Use Object',
+		description="What type of thing triggers a derailment",
+	)
 	derail_loc = bpy.props.FloatVectorProperty(
 		name="Derail Coords",
 		subtype='XYZ',
@@ -141,6 +148,7 @@ class TrainCarAdd(bpy.types.Operator):
 		col.enabled = self.derail
 		if self.derail_at == 'OBJ':
 			col.prop_search(self, 'derail_obj', context.scene, 'objects')
+			col.prop(self,'derail_obj_type')
 		elif self.derail_at == 'LOC':
 			col.prop(self,'derail_loc')
 		else:
