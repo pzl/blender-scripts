@@ -28,7 +28,7 @@ THE SOFTWARE.
 import bpy
 
 
-class MyOperator(bpy.types.Operator):
+class TrainCarAdd(bpy.types.Operator):
 	bl_idname = "object.traincar"
 	bl_label = "Add Traincar"
 	bl_options = {'REGISTER', 'UNDO'}
@@ -42,18 +42,58 @@ class MyOperator(bpy.types.Operator):
 	n = bpy.props.IntProperty(
 		name="Cars",
 		default=1,
+		min=0,
 		description="Number of cars to generate"
-	)
-	kf = bpy.props.FloatProperty(
-		name="Keyframes",
-		default=3,
-		description="Keyframe separation for delayed linkage animation"
 	)
 	velo = bpy.props.FloatVectorProperty(
 		name="Velocity",
 		subtype='VELOCITY',
 		unit='VELOCITY',
 		description="Initial Train Velocity"
+	)
+
+	derail = bpy.props.BoolProperty(
+		name="Derail",
+		default=True,
+		description="Whether keyframe-controlled movement stops and rigid body physics takes over",
+	)
+	derail_collective = bpy.props.BoolProperty(
+		name="All together",
+		default=True,
+		description="Do all cars lose acceleration and controlled movement at the same time?",
+	)
+
+	derail_at = bpy.props.EnumProperty(
+		items=(
+			('OBJ',"Object","Train derails at object center (e.g. an empty)",'OBJECT_DATA',1),
+			('LOC',"Location","Train derails at manually entered location",'AXIS_SIDE',2),
+			('FRAME',"Frame","Train derails at specific frame",'TIME',3),
+		),
+		name='Derail At',
+		description="What type of thing triggers a derailment",
+	)
+
+	derail_obj = bpy.props.StringProperty(
+		name="Derail At",
+		description="Derail train at this object's location"
+	)
+
+	derail_loc = bpy.props.FloatVectorProperty(
+		name="Derail Coords",
+		subtype='XYZ',
+		unit='NONE',
+		description="Global coordinates to derailment"
+	)
+
+	derail_frame = bpy.props.IntProperty(
+		name='Frame',
+		default=10,
+		description="Frame number for cars to stop controlled animation at"
+	)
+	derail_frame_spacing = bpy.props.FloatProperty(
+		name='Spacing',
+		default=1.0,
+		description="Amount of frames between each subsequent car derailing after Frame above"
 	)
 
 
@@ -64,9 +104,12 @@ class MyOperator(bpy.types.Operator):
 	def execute(self, context):
 		my_operation(
 			spacing=self.spacing,
-			n=self.n,
-			keyframes=self.kf,
-			velo=self.velo
+			amount=self.n,
+			velo=self.velo,
+			derail=self.derail,
+			collectively=self.derail_collective,
+			derail_type=self.derail_at,
+			derail_val = self.derail_obj if self.derail_at == 'OBJ' else self.derail_loc if self.derail_at == 'LOC' else (self.derail_frame,self.derail_frame_spacing)
 		)
 		return {'FINISHED'}
 
@@ -76,10 +119,6 @@ class MyOperator(bpy.types.Operator):
 		row = col.row(align=True)
 		row.prop(self,'n')
 
-		col = layout.column(align=True)
-		row=col.row(align=True)
-		row.prop(self,'kf')
-
 		#positon
 		col = layout.column(align=True)
 		col.prop(self,'spacing')
@@ -87,6 +126,29 @@ class MyOperator(bpy.types.Operator):
 		#velocity
 		col = layout.column(align=True)
 		col.prop(self,'velo')
+
+		col = layout.column(align=True)
+		col.prop(self,'derail')
+
+		col = layout.column(align=True)
+		col.enabled = self.derail
+		row = col.row(align=True)
+		row.prop(self,'derail_collective')
+		row = col.row(align=True)
+		row.prop(self,'derail_at')
+
+		col = layout.column(align=True)
+		col.enabled = self.derail
+		if self.derail_at == 'OBJ':
+			col.prop_search(self, 'derail_obj', context.scene, 'objects')
+		elif self.derail_at == 'LOC':
+			col.prop(self,'derail_loc')
+		else:
+			row = col.row(align=True)
+			row.prop(self,'derail_frame')
+			row = col.row(align=True)
+			row.enabled = not self.derail_collective
+			row.prop(self,'derail_frame_spacing')
 
 
 class TrainCarPanel(bpy.types.Panel):
@@ -103,20 +165,16 @@ class TrainCarPanel(bpy.types.Panel):
 		row.operator("object.traincar", text = "Add cars", icon='AUTO')
 
 
-def my_operation(spacing=(0,0,0),n=1,keyframes=1,velo=(0,0,0)):
+def my_operation(spacing=(0,0,0),amount=1,velo=(0,0,0),derail=True,collectively=True,derail_type='FRAME',derail_val=None):
 
+	for i in range(amount): # loop to do this for every new car
+		start_frame = 1
 
-	for i in range(n): # loop to do this for every new car
-
-		# handles to current and next cars for linking
-		current_car = None
-		new_car = None
-
-		#find current traincar object
-		current_car = next(obj for obj in bpy.context.selected_objects if obj.type != 'EMPTY')
+		# handles to cars objects for constraint linking later
+		current_car = bpy.context.active_object #car body should be active element for proper linking
 
 		###
-		# perform linked duplication
+		# Linked Duplication
 		###
 		bpy.ops.object.duplicate_move_linked(
 			TRANSFORM_OT_translate={
@@ -125,51 +183,112 @@ def my_operation(spacing=(0,0,0),n=1,keyframes=1,velo=(0,0,0)):
 			} )
 		bpy.ops.object.make_single_user(animation=True) # allows for separate keyframe times for traincar and constraints
 
-		# find traincar object
-		new_car = next(obj for obj in bpy.context.selected_objects if obj.type != 'EMPTY')
+		new_car = bpy.context.active_object # get next car object handle
 
 
 		###
-		# Keyframe Traincar object itself for initial velocity
+		# Motion Keyframing
 		# note: bpy.context.scene.frame_current may be helpful for generic conversion
 		###
 
-		# keyframe the "Animated" Rigid body setting
-		new_car.rigid_body.kinematic = True
-		new_car.keyframe_insert('rigid_body.kinematic',frame=1)
-		new_car.rigid_body.kinematic = False
-		new_car.keyframe_insert('rigid_body.kinematic',frame=3)
+		if not new_car.animation_data:
+			new_car.animation_data_create()
+		if not new_car.animation_data.action:
+			new_car.animation_data.action = bpy.data.actions.new(new_car.name + "-Action")
 
-		# keyframe movement
-		new_car.keyframe_insert('location',frame=1) # frame the location from duplication
-		new_car.location.x += velo[0] #move according to initial velocity
-		new_car.location.y += velo[1]
-		new_car.location.z += velo[2]
-		new_car.keyframe_insert('location',frame=2) # frame the accel
-		new_car.location.x -= velo[0] #move back to starting position
-		new_car.location.y -= velo[1]
-		new_car.location.z -= velo[2]
+		# find location curves if they already exist from parent object
+		fx, fy, fz = (None,)*3
+		kf_animated = None
+		for fcurve in new_car.animation_data.action.fcurves:
+			if fcurve.data_path == 'location':
+				if fcurve.array_index == 0:
+					fx = fcurve
+				elif fcurve.array_index == 1:
+					fy = fcurve
+				elif fcurve.array_index == 2:
+					fz = fcurve
+			if fcurve.data_path == 'rigid_body.kinematic':
+				kf_animated = fcurve
+
+		if not fx:
+			fx = new_car.animation_data.action.fcurves.new('location', index=0, action_group="train")
+		if not fy:
+			fy = new_car.animation_data.action.fcurves.new('location', index=1, action_group="train")
+		if not fz:
+			fz = new_car.animation_data.action.fcurves.new('location', index=2, action_group="train")
+		if not kf_animated:
+			kf_animated = new_car.animation_data.action.fcurves.new('rigid_body.kinematic',action_group="train")
+
+
+		# FCurve settings
+		fx.color_mode = 'AUTO_RGB'
+		fy.color_mode = 'AUTO_RGB'
+		fz.color_mode = 'AUTO_RGB'
+
+
+		(sx,sy,sz) = new_car.location # save starting location from duplication
+
+		# Initial keyframes
+		kf_animated.keyframe_points.insert(start_frame,1).interpolation = 'CONSTANT' # "Animated" = True keyframed at frame 1
+		fx.keyframe_points.insert(start_frame, sx).interpolation = 'LINEAR'
+		fy.keyframe_points.insert(start_frame, sy).interpolation = 'LINEAR'
+		fz.keyframe_points.insert(start_frame, sz).interpolation = 'LINEAR'
+
+
+		if not derail:
+			# set forever motion
+			fx.extrapolation = 'LINEAR'
+			fy.extrapolation = 'LINEAR'
+			fz.extrapolation = 'LINEAR'
+
+			# put in velocity
+			fx.keyframe_points.insert(start_frame+1, sx+velo[0])
+			fy.keyframe_points.insert(start_frame+1, sy+velo[1])
+			fz.keyframe_points.insert(start_frame+1, sz+velo[2])
+			return
+		# Everything below must ONLY apply to rigid body physics and derailed trains
+
+		if derail_type == 'FRAME':
+
+			# Determine final on-rails frame for this car
+			end_frame = derail_val[0]
+			if not collectively:
+				end_frame = derail_val[0] + (i+1)*derail_val[1]
+
+			# delete any existing keyframes that would interfere with our motion here
+			for key in kf_animated.keyframe_points:
+				if key.co.x > start_frame and key.co.x <= end_frame+1:
+					kf_animated.keyframe_points.remove(key) # @todo: will removing a key while looping bork the looping?
+			for curve in (fx,fy,fz):
+				for key in curve.keyframe_points:
+					if key.co.x > start_frame and key.co.x <= end_frame:
+						curve.keyframe_points.remove(key)
+
+			# make our controlled keyframes
+			kf_animated.keyframe_points.insert(end_frame+1, 0) # turn off keyframed motion, use rigid body phys now
+			fx.keyframe_points.insert(end_frame, sx+velo[0]*end_frame)
+			fy.keyframe_points.insert(end_frame, sy+velo[1]*end_frame)
+			fz.keyframe_points.insert(end_frame, sz+velo[2]*end_frame)
 
 		###
 		# Reassign physics constraints links between cars
+		#  special lil' handy bit to reassign any rigid body constraints
+		#  that were copied to be between each car now
 		###
 		for obj in bpy.context.selected_objects:
-			if obj.type == 'EMPTY':
+			if obj.rigid_body_constraint != None:
 				obj.rigid_body_constraint.object1 = current_car
 				obj.rigid_body_constraint.object2 = new_car
 
-				#space out constraint keyframe endings
-				#this part is super specific to what I needed in one instance
-				#and probably should be taken out for any generic or repeated use of this script
-				obj.animation_data.action.fcurves[0].keyframe_points[1].co.x += keyframes
+
 
 
 def register():
 	bpy.utils.register_class(TrainCarPanel)
-	bpy.utils.register_class(MyOperator)
+	bpy.utils.register_class(TrainCarAdd)
 def unregister():
 	bpy.utils.unregister_class(TrainCarPanel)
-	bpy.utils.unregister_class(MyOperator)
+	bpy.utils.unregister_class(TrainCarAdd)
 
 if __name__ == "__main__":
 	register()
