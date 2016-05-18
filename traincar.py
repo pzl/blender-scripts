@@ -83,6 +83,7 @@ class TrainCarAdd(bpy.types.Operator):
 			('LOC',"Center","Train derails when it is very close to object's center (location)",'MANIPUL',2),
 		),
 		name='Use Object',
+		default='LOC',
 		description="What type of thing triggers a derailment",
 	)
 	derail_loc = bpy.props.FloatVectorProperty(
@@ -135,7 +136,8 @@ class TrainCarAdd(bpy.types.Operator):
 		col.prop(self,'velo')
 
 		col = layout.column(align=True)
-		col.prop(self,'derail')
+		row = col.row(align=True)
+		row.prop(self,'derail')
 
 		col = layout.column(align=True)
 		col.enabled = self.derail
@@ -148,7 +150,9 @@ class TrainCarAdd(bpy.types.Operator):
 		col.enabled = self.derail
 		if self.derail_at == 'OBJ':
 			col.prop_search(self, 'derail_obj', context.scene, 'objects')
-			col.prop(self,'derail_obj_type')
+			row = col.row(align=True)
+			row.enabled = False
+			row.prop(self,'derail_obj_type')
 		elif self.derail_at == 'LOC':
 			col.prop(self,'derail_loc')
 		else:
@@ -174,9 +178,10 @@ class TrainCarPanel(bpy.types.Panel):
 
 
 def my_operation(spacing=(0,0,0),amount=1,velo=(0,0,0),derail=True,collectively=True,derail_type='FRAME',derail_val=None):
+	start_frame = 1
+	end_frame = None
 
 	for i in range(amount): # loop to do this for every new car
-		start_frame = 1
 
 		# handles to cars objects for constraint linking later
 		current_car = bpy.context.active_object #car body should be active element for proper linking
@@ -257,26 +262,44 @@ def my_operation(spacing=(0,0,0),amount=1,velo=(0,0,0),derail=True,collectively=
 		# Everything below must ONLY apply to rigid body physics and derailed trains
 
 		if derail_type == 'FRAME':
-
 			# Determine final on-rails frame for this car
 			end_frame = derail_val[0]
 			if not collectively:
 				end_frame = derail_val[0] + (i+1)*derail_val[1]
+		else:
+			# determine where we are crashing
+			point = derail_val if derail_type == 'LOC' else bpy.context.scene.objects[derail_val].location if derail_val else None
+			# we don't have a crash location yet so hold off
+			if not point:
+				return
 
-			# delete any existing keyframes that would interfere with our motion here
-			for key in kf_animated.keyframe_points:
-				if key.co.x > start_frame and key.co.x <= end_frame+1:
-					kf_animated.keyframe_points.remove(key) # @todo: will removing a key while looping bork the looping?
-			for curve in (fx,fy,fz):
-				for key in curve.keyframe_points:
-					if key.co.x > start_frame and key.co.x <= end_frame:
-						curve.keyframe_points.remove(key)
+			# @todo: assumes will collide within 500 frames. "Magic" number beware
+			# @todo: <= 2 blender units also magic number.
+			if not collectively or end_frame is None: #only do this once if crashing collectively
+				for i in range(500):
+					if abs((sx+velo[0]*i) - point[0]) <= 2 and abs((sy+velo[1]*i) - point[1]) <= 2 and abs((sz+velo[2]*i) - point[2]) <= 2:
+						break
+				end_frame=i
 
-			# make our controlled keyframes
-			kf_animated.keyframe_points.insert(end_frame+1, 0) # turn off keyframed motion, use rigid body phys now
-			fx.keyframe_points.insert(end_frame, sx+velo[0]*end_frame)
-			fy.keyframe_points.insert(end_frame, sy+velo[1]*end_frame)
-			fz.keyframe_points.insert(end_frame, sz+velo[2]*end_frame)
+
+		###
+		# Set final keyframes at crash time
+		###
+
+		# delete any existing keyframes that would interfere with our motion here
+		for key in kf_animated.keyframe_points:
+			if key.co.x > start_frame and key.co.x <= end_frame+1:
+				kf_animated.keyframe_points.remove(key) # @todo: will removing a key while looping bork the looping?
+		for curve in (fx,fy,fz):
+			for key in curve.keyframe_points:
+				if key.co.x > start_frame and key.co.x <= end_frame:
+					curve.keyframe_points.remove(key)
+
+		# make our controlled keyframes
+		kf_animated.keyframe_points.insert(end_frame+1, 0) # turn off keyframed motion, use rigid body phys now
+		fx.keyframe_points.insert(end_frame, sx+velo[0]*end_frame)
+		fy.keyframe_points.insert(end_frame, sy+velo[1]*end_frame)
+		fz.keyframe_points.insert(end_frame, sz+velo[2]*end_frame)
 
 		###
 		# Reassign physics constraints links between cars
