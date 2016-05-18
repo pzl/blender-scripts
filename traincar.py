@@ -328,12 +328,13 @@ def do_traincars(spacing=(0,0,0),amount=1,velo=(0,0,0),derail=True,collectively=
 		start_movement(new_car.location, start_frame, (fx,fy,fz,kf_animated) )
 
 		if not derail:
-			return move_forever(new_car.location,start_frame,velo, (fx,fy,fz,kf_animated))
+			move_forever(new_car.location,start_frame,velo, (fx,fy,fz,kf_animated))
+			continue
 		#only derailing trains below
 
 		end_frame = find_collision_frame(i,end_frame, new_car.location, velo, derail_type,derail_val, collectively)
 		if end_frame is None: # info not set yet, or no collision found
-			return
+			continue
 
 		# Set final keyframes at crash time
 		end_movement(start_frame, end_frame, new_car.location, velo, (fx,fy,fz,kf_animated))
