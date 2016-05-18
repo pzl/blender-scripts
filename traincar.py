@@ -318,17 +318,29 @@ def do_traincars(spacing=(0,0,0),amount=1,velo=(0,0,0),derail=True,collectively=
 	start_frame = 1 # note: bpy.context.scene.frame_current may be helpful in the future
 	end_frame = None
 
+
+	# first iteration for principal engine car
+	car = bpy.context.active_object
+	curves = get_or_make_curves(car)
+	start_movement(car.location, start_frame, curves)
+	if not derail:
+		move_forever(car.location,start_frame,velo,curves)
+	else:
+		end_frame = find_collision_frame(-1,end_frame,car.location,velo, derail_type,derail_val, collectively)
+		if end_frame:
+			end_movement(start_frame, end_frame, car.location, velo, curves)
+
 	for i in range(amount): # loop to do this for every new car
 
 		current_car, new_car = duplicate(spacing)
 
 		# Motion Keyframing
-		fx,fy,fz,kf_animated = get_or_make_curves(new_car)
+		curves = get_or_make_curves(new_car)
 
-		start_movement(new_car.location, start_frame, (fx,fy,fz,kf_animated) )
+		start_movement(new_car.location, start_frame, curves )
 
 		if not derail:
-			move_forever(new_car.location,start_frame,velo, (fx,fy,fz,kf_animated))
+			move_forever(new_car.location,start_frame,velo, curves)
 			continue
 		#only derailing trains below
 
@@ -337,7 +349,7 @@ def do_traincars(spacing=(0,0,0),amount=1,velo=(0,0,0),derail=True,collectively=
 			continue
 
 		# Set final keyframes at crash time
-		end_movement(start_frame, end_frame, new_car.location, velo, (fx,fy,fz,kf_animated))
+		end_movement(start_frame, end_frame, new_car.location, velo, curves)
 
 
 
