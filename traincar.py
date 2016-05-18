@@ -110,7 +110,7 @@ class TrainCarAdd(bpy.types.Operator):
 		return context.active_object is not None and context.active_object.rigid_body is not None
 
 	def execute(self, context):
-		my_operation(
+		do_traincars(
 			spacing=self.spacing,
 			amount=self.n,
 			velo=self.velo,
@@ -169,7 +169,6 @@ class TrainCarPanel(bpy.types.Panel):
 	bl_space_type = "VIEW_3D"
 	bl_region_type = "TOOLS"
 
-
 	def draw(self, context):
 		layout = self.layout
 		col = layout.column(align=True)
@@ -177,139 +176,167 @@ class TrainCarPanel(bpy.types.Panel):
 		row.operator("object.traincar", text = "Add cars", icon='AUTO')
 
 
-def my_operation(spacing=(0,0,0),amount=1,velo=(0,0,0),derail=True,collectively=True,derail_type='FRAME',derail_val=None):
-	start_frame = 1
+
+
+def duplicate(spacing):
+	current_car = bpy.context.active_object #car body should be active element for proper linking
+
+	# Linked Duplication
+	bpy.ops.object.duplicate_move_linked(
+		TRANSFORM_OT_translate={
+			'value': ( spacing[0], spacing[1], spacing[2] ),
+			'constraint_orientation':'GLOBAL'
+		} )
+	bpy.ops.object.make_single_user(animation=True) # allows for separate keyframe times for traincar and constraints
+
+	new_car = bpy.context.active_object # get next car object handle
+
+	###
+	# Reassign physics constraints links between cars
+	#  special lil' handy bit to reassign any rigid body constraints
+	#  that were copied to be between each car now
+	###
+	for obj in bpy.context.selected_objects:
+		if obj.rigid_body_constraint != None:
+			obj.rigid_body_constraint.object1 = current_car
+			obj.rigid_body_constraint.object2 = new_car
+
+	return (current_car,new_car)
+
+
+def get_or_make_curves(car):
+	if not car.animation_data:
+		car.animation_data_create()
+	if not car.animation_data.action:
+		car.animation_data.action = bpy.data.actions.new(car.name + "-Action")
+
+	# find location curves if they already exist from parent object
+	fx, fy, fz = (None,)*3
+	kf_animated = None
+	for fcurve in car.animation_data.action.fcurves:
+		if fcurve.data_path == 'location':
+			if fcurve.array_index == 0:
+				fx = fcurve
+			elif fcurve.array_index == 1:
+				fy = fcurve
+			elif fcurve.array_index == 2:
+				fz = fcurve
+		if fcurve.data_path == 'rigid_body.kinematic':
+			kf_animated = fcurve
+
+	if not fx:
+		fx = car.animation_data.action.fcurves.new('location', index=0, action_group="train")
+	if not fy:
+		fy = car.animation_data.action.fcurves.new('location', index=1, action_group="train")
+	if not fz:
+		fz = car.animation_data.action.fcurves.new('location', index=2, action_group="train")
+	if not kf_animated:
+		kf_animated = car.animation_data.action.fcurves.new('rigid_body.kinematic',action_group="train")
+
+	# FCurve settings
+	fx.color_mode = 'AUTO_RGB'
+	fy.color_mode = 'AUTO_RGB'
+	fz.color_mode = 'AUTO_RGB'
+
+	return (fx,fy,fz,kf_animated)
+
+
+def start_movement(start_position,start_frame,curves):
+	(fx,fy,fz,kf_animated) = curves
+
+	# Initial keyframes
+	kf_animated.keyframe_points.insert(start_frame,1).interpolation = 'CONSTANT' # "Animated" = True keyframed at frame 1
+	fx.keyframe_points.insert(start_frame, start_position[0]).interpolation = 'LINEAR'
+	fy.keyframe_points.insert(start_frame, start_position[1]).interpolation = 'LINEAR'
+	fz.keyframe_points.insert(start_frame, start_position[2]).interpolation = 'LINEAR'
+
+
+def move_forever(start_position,start_frame,velocity,curves):
+	(fx,fy,fz,kf_animated) = curves
+
+	# set forever motion
+	fx.extrapolation = 'LINEAR'
+	fy.extrapolation = 'LINEAR'
+	fz.extrapolation = 'LINEAR'
+
+	# put in velocity
+	fx.keyframe_points.insert( start_frame+1, start_position[0] + velocity[0] )
+	fy.keyframe_points.insert( start_frame+1, start_position[1] + velocity[1] )
+	fz.keyframe_points.insert( start_frame+1, start_position[2] + velocity[2] )
+
+
+def find_collision_frame(car_n, end_frame, start_position, velocity, derail_type, derail_val, collectively):
+	if derail_type == 'FRAME':
+		# Determine final on-rails frame for this car
+		return derail_val[0] if collectively else derail_val[0] + (car_n+1)*derail_val[1]
+
+	# otherwise type is object or location
+
+
+	# for collective crashes where we computed the collision frame already, don't recompute, just send it back
+	if collectively and end_frame is not None:
+		return end_frame
+
+	# determine where we are crashing
+	point = derail_val if derail_type == 'LOC' else bpy.context.scene.objects[derail_val].location if derail_val else None
+	if not point:	# we don't have a location set yet so hold off
+		return None
+
+
+	# @todo: assumes will collide within 500 frames. "Magic" number beware
+	# @todo: <= 2 blender units also magic number.
+	for i in range(500):
+		if abs( (start_position[0]+velocity[0]*i) - point[0] ) <= 2 and \
+		   abs( (start_position[1]+velocity[1]*i) - point[1] ) <= 2 and \
+		   abs( (start_position[2]+velocity[2]*i) - point[2] ) <= 2:
+			return i
+
+	return None # no collision found
+
+
+
+def end_movement(start_frame, end_frame, start_position, velocity, curves):
+	(fx,fy,fz,kf_animated) = curves
+
+	# delete any existing keyframes that would interfere with our motion here
+	for key in kf_animated.keyframe_points:
+		if key.co.x > start_frame and key.co.x <= end_frame+1:
+			kf_animated.keyframe_points.remove(key) # @todo: will removing a key while looping bork the looping?
+	for curve in (fx,fy,fz):
+		for key in curve.keyframe_points:
+			if key.co.x > start_frame and key.co.x <= end_frame:
+				curve.keyframe_points.remove(key)
+
+	# make our controlled keyframes
+	kf_animated.keyframe_points.insert(end_frame+1, 0) # turn off keyframed motion, use rigid body phys now
+	fx.keyframe_points.insert(end_frame, start_position[0] + velocity[0] * end_frame)
+	fy.keyframe_points.insert(end_frame, start_position[1] + velocity[1] * end_frame)
+	fz.keyframe_points.insert(end_frame, start_position[2] + velocity[2] * end_frame)
+
+
+def do_traincars(spacing=(0,0,0),amount=1,velo=(0,0,0),derail=True,collectively=True,derail_type='FRAME',derail_val=None):
+	start_frame = 1 # note: bpy.context.scene.frame_current may be helpful in the future
 	end_frame = None
 
 	for i in range(amount): # loop to do this for every new car
 
-		# handles to cars objects for constraint linking later
-		current_car = bpy.context.active_object #car body should be active element for proper linking
+		current_car, new_car = duplicate(spacing)
 
-		###
-		# Linked Duplication
-		###
-		bpy.ops.object.duplicate_move_linked(
-			TRANSFORM_OT_translate={
-				'value': ( spacing[0], spacing[1], spacing[2] ),
-				'constraint_orientation':'GLOBAL'
-			} )
-		bpy.ops.object.make_single_user(animation=True) # allows for separate keyframe times for traincar and constraints
-
-		new_car = bpy.context.active_object # get next car object handle
-
-
-		###
 		# Motion Keyframing
-		# note: bpy.context.scene.frame_current may be helpful for generic conversion
-		###
+		fx,fy,fz,kf_animated = get_or_make_curves(new_car)
 
-		if not new_car.animation_data:
-			new_car.animation_data_create()
-		if not new_car.animation_data.action:
-			new_car.animation_data.action = bpy.data.actions.new(new_car.name + "-Action")
-
-		# find location curves if they already exist from parent object
-		fx, fy, fz = (None,)*3
-		kf_animated = None
-		for fcurve in new_car.animation_data.action.fcurves:
-			if fcurve.data_path == 'location':
-				if fcurve.array_index == 0:
-					fx = fcurve
-				elif fcurve.array_index == 1:
-					fy = fcurve
-				elif fcurve.array_index == 2:
-					fz = fcurve
-			if fcurve.data_path == 'rigid_body.kinematic':
-				kf_animated = fcurve
-
-		if not fx:
-			fx = new_car.animation_data.action.fcurves.new('location', index=0, action_group="train")
-		if not fy:
-			fy = new_car.animation_data.action.fcurves.new('location', index=1, action_group="train")
-		if not fz:
-			fz = new_car.animation_data.action.fcurves.new('location', index=2, action_group="train")
-		if not kf_animated:
-			kf_animated = new_car.animation_data.action.fcurves.new('rigid_body.kinematic',action_group="train")
-
-
-		# FCurve settings
-		fx.color_mode = 'AUTO_RGB'
-		fy.color_mode = 'AUTO_RGB'
-		fz.color_mode = 'AUTO_RGB'
-
-
-		(sx,sy,sz) = new_car.location # save starting location from duplication
-
-		# Initial keyframes
-		kf_animated.keyframe_points.insert(start_frame,1).interpolation = 'CONSTANT' # "Animated" = True keyframed at frame 1
-		fx.keyframe_points.insert(start_frame, sx).interpolation = 'LINEAR'
-		fy.keyframe_points.insert(start_frame, sy).interpolation = 'LINEAR'
-		fz.keyframe_points.insert(start_frame, sz).interpolation = 'LINEAR'
-
+		start_movement(new_car.location, start_frame, (fx,fy,fz,kf_animated) )
 
 		if not derail:
-			# set forever motion
-			fx.extrapolation = 'LINEAR'
-			fy.extrapolation = 'LINEAR'
-			fz.extrapolation = 'LINEAR'
+			return move_forever(new_car.location,start_frame,velo, (fx,fy,fz,kf_animated))
+		#only derailing trains below
 
-			# put in velocity
-			fx.keyframe_points.insert(start_frame+1, sx+velo[0])
-			fy.keyframe_points.insert(start_frame+1, sy+velo[1])
-			fz.keyframe_points.insert(start_frame+1, sz+velo[2])
+		end_frame = find_collision_frame(i,end_frame, new_car.location, velo, derail_type,derail_val, collectively)
+		if end_frame is None: # info not set yet, or no collision found
 			return
-		# Everything below must ONLY apply to rigid body physics and derailed trains
 
-		if derail_type == 'FRAME':
-			# Determine final on-rails frame for this car
-			end_frame = derail_val[0]
-			if not collectively:
-				end_frame = derail_val[0] + (i+1)*derail_val[1]
-		else:
-			# determine where we are crashing
-			point = derail_val if derail_type == 'LOC' else bpy.context.scene.objects[derail_val].location if derail_val else None
-			# we don't have a crash location yet so hold off
-			if not point:
-				return
-
-			# @todo: assumes will collide within 500 frames. "Magic" number beware
-			# @todo: <= 2 blender units also magic number.
-			if not collectively or end_frame is None: #only do this once if crashing collectively
-				for i in range(500):
-					if abs((sx+velo[0]*i) - point[0]) <= 2 and abs((sy+velo[1]*i) - point[1]) <= 2 and abs((sz+velo[2]*i) - point[2]) <= 2:
-						break
-				end_frame=i
-
-
-		###
 		# Set final keyframes at crash time
-		###
-
-		# delete any existing keyframes that would interfere with our motion here
-		for key in kf_animated.keyframe_points:
-			if key.co.x > start_frame and key.co.x <= end_frame+1:
-				kf_animated.keyframe_points.remove(key) # @todo: will removing a key while looping bork the looping?
-		for curve in (fx,fy,fz):
-			for key in curve.keyframe_points:
-				if key.co.x > start_frame and key.co.x <= end_frame:
-					curve.keyframe_points.remove(key)
-
-		# make our controlled keyframes
-		kf_animated.keyframe_points.insert(end_frame+1, 0) # turn off keyframed motion, use rigid body phys now
-		fx.keyframe_points.insert(end_frame, sx+velo[0]*end_frame)
-		fy.keyframe_points.insert(end_frame, sy+velo[1]*end_frame)
-		fz.keyframe_points.insert(end_frame, sz+velo[2]*end_frame)
-
-		###
-		# Reassign physics constraints links between cars
-		#  special lil' handy bit to reassign any rigid body constraints
-		#  that were copied to be between each car now
-		###
-		for obj in bpy.context.selected_objects:
-			if obj.rigid_body_constraint != None:
-				obj.rigid_body_constraint.object1 = current_car
-				obj.rigid_body_constraint.object2 = new_car
+		end_movement(start_frame, end_frame, new_car.location, velo, (fx,fy,fz,kf_animated))
 
 
 
