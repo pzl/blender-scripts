@@ -283,9 +283,9 @@ def find_collision_frame(car_n, end_frame, start_position, velocity, derail_type
 		return None
 
 
-	# @todo: assumes will collide within 500 frames. "Magic" number beware
+	# @todo: notify if collisions not found in current frame range?
 	# @todo: <= 2 blender units also magic number.
-	for i in range(500):
+	for i in range(bpy.context.scene.frame_end):
 		if abs( (start_position[0]+velocity[0]*i) - point[0] ) <= 2 and \
 		   abs( (start_position[1]+velocity[1]*i) - point[1] ) <= 2 and \
 		   abs( (start_position[2]+velocity[2]*i) - point[2] ) <= 2:
