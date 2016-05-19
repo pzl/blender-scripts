@@ -104,25 +104,36 @@ class TrainCarAdd(bpy.types.Operator):
 		description="Amount of frames between each subsequent car derailing after Frame above"
 	)
 
+	go = bpy.props.BoolProperty(
+		name="Run",
+		default=False,
+		description="Live Update",
+	)
+
 
 	@classmethod
 	def poll(cls, context):
 		return context.active_object is not None and context.active_object.rigid_body is not None
 
 	def execute(self, context):
-		do_traincars(
-			spacing=self.spacing,
-			amount=self.n,
-			velo=self.velo,
-			derail=self.derail,
-			collectively=self.derail_collective,
-			derail_type=self.derail_at,
-			derail_val = self.derail_obj if self.derail_at == 'OBJ' else self.derail_loc if self.derail_at == 'LOC' else (self.derail_frame,self.derail_frame_spacing)
-		)
+		if self.go:
+			do_traincars(
+				spacing=self.spacing,
+				amount=self.n,
+				velo=self.velo,
+				derail=self.derail,
+				collectively=self.derail_collective,
+				derail_type=self.derail_at,
+				derail_val = self.derail_obj if self.derail_at == 'OBJ' else self.derail_loc if self.derail_at == 'LOC' else (self.derail_frame,self.derail_frame_spacing)
+			)
 		return {'FINISHED'}
 
 	def draw(self,context):
 		layout = self.layout
+
+		col = layout.column(align=True)
+		col.prop(self,'go')
+
 		col = layout.column(align=True)
 		row = col.row(align=True)
 		row.prop(self,'n')
