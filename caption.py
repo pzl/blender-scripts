@@ -28,22 +28,44 @@ THE SOFTWARE.
 import bpy
 import math
 
+# 0-indexed
+FG_LAYER = 5
+BG_LAYER = FG_LAYER + 10
+
+FG_LAYER_NAME = 'Caption Text'
+BG_LAYER_NAME = 'Caption Shadow'
+
+
+
+
+
+FG_LAYER_MASK = [False]*20
+BG_LAYER_MASK = [False]*20
+FG_LAYER_MASK[FG_LAYER] = True
+BG_LAYER_MASK[BG_LAYER] = True
+
+
 def render_settings():
 	# set up render size presets
 	bpy.context.scene.render.resolution_x = 1280
 	bpy.context.scene.render.resolution_y = 720
 	bpy.context.scene.render.resolution_percentage = 100
-	bpy.context.scene.render.engine='CYCLES'
 	bpy.context.scene.render.fps=24
 
+	# CYCLES
 	#transparent bg for easy alpha-overing
 	bpy.context.scene.cycles.film_transparent = True
+	
 
-
+	
 def speedup_settings():
 	"""
 		Speed optimizations
 	"""
+
+	###
+	# Cycles
+	###
 	bpy.context.scene.cycles.device = 'GPU'
 
 	# Speed up rendering with minimal bounces
@@ -65,33 +87,54 @@ def speedup_settings():
 	bpy.context.scene.render.tile_y = 256
 
 
+	###
+	# Blender Internal
+	###
+	bpy.context.scene.render.use_textures = False
+	bpy.context.scene.render.use_shadows = False
+	bpy.context.scene.render.use_sss = False
+	bpy.context.scene.render.use_envmaps = False
+	bpy.context.scene.render.use_raytrace = False
+
+
 def scene_layers():
-	# setup scene layers
-	bpy.context.scene.layers = [True] + [False]*9 + [True] + [False]*9
+	bpy.context.scene.layers[FG_LAYER] = True
+	bpy.context.scene.layers[BG_LAYER] = True
 
-	for i in bpy.context.scene.render.layers:
-		bpy.ops.scene.render_layer_remove()
+	fg = None
+	bg = None
 
-	# we cannot delete all layers, so one always remains
-	bpy.ops.scene.render_layer_add() #we will add a second layer for the black background text
+	for l in bpy.context.scene.render.layers:
+		if l.name == FG_LAYER_NAME:
+			fg = l
+		elif l.name == BG_LAYER_NAME:
+			bg = l
 
-	bpy.context.scene.render.layers[0].name = 'Text'
-	bpy.context.scene.render.layers['Text'].layers = [True] + [False]*19
-	bpy.context.scene.render.layers['Text'].use_solid = True
-	bpy.context.scene.render.layers['Text'].use_strand = False
-	bpy.context.scene.render.layers['Text'].use_sky = False
+	if not fg:
+		bpy.ops.scene.render_layer_add()
+		bpy.context.scene.render.layers[0].name = FG_LAYER_NAME
+		bpy.context.scene.render.layers[FG_LAYER_NAME].layers = FG_LAYER_MASK
+		bpy.context.scene.render.layers[FG_LAYER_NAME].use_solid = True
+		bpy.context.scene.render.layers[FG_LAYER_NAME].use_strand = False
+		bpy.context.scene.render.layers[FG_LAYER_NAME].use_sky = False
 
-	bpy.context.scene.render.layers[1].name = 'Shadow'
-	bpy.context.scene.render.layers['Shadow'].layers = [False]*10 + [True] + [False]*9
-	bpy.context.scene.render.layers['Shadow'].use_solid = True
-	bpy.context.scene.render.layers['Shadow'].use_strand = False
-	bpy.context.scene.render.layers['Shadow'].use_sky = False
+	if not bg:
+		bpy.ops.scene.render_layer_add()
+		bpy.context.scene.render.layers[1].name = BG_LAYER_NAME
+		bpy.context.scene.render.layers[BG_LAYER_NAME].layers = BG_LAYER_MASK
+		bpy.context.scene.render.layers[BG_LAYER_NAME].use_solid = True
+		bpy.context.scene.render.layers[BG_LAYER_NAME].use_strand = False
+		bpy.context.scene.render.layers[BG_LAYER_NAME].use_sky = False
 
-	bpy.context.scene.render.layers.active = bpy.context.scene.render.layers['Text']
+	bpy.context.scene.render.layers.active = bpy.context.scene.render.layers[FG_LAYER_NAME]
 
 
 
 def setup_camera():
+	if not bpy.context.scene.camera:
+		bpy.ops.object.camera_add()
+		bpy.context.scene.camera = bpy.context.object
+
 	# set up camera position and type
 	bpy.context.scene.camera.location = (0,-21,0)
 	bpy.context.scene.camera.data.ortho_scale = 17
@@ -100,26 +143,12 @@ def setup_camera():
 	bpy.context.scene.camera.rotation_euler = (math.radians(90),0,0)
 
 
-def delete_all():
-	# delete existing objects
-	bpy.ops.object.select_all(action='SELECT')
-	for obj in bpy.context.selected_objects:
-		if obj == bpy.context.scene.camera:
-			obj.select=False # don't erase the camera!
-			break
-	bpy.ops.object.delete()
-
-	for item in bpy.data.materials:
-		item.user_clear()
-		bpy.data.materials.remove(item)
-
-	for item in bpy.data.meshes:
-		item.user_clear()
-		bpy.data.meshes.remove(item)
-
-
 def material_nodes(mat, rgba):
 	mat.use_nodes=True
+
+	###
+	# Cycles
+	###
 
 	mat.node_tree.nodes.remove(mat.node_tree.nodes['Diffuse BSDF'])
 
@@ -147,25 +176,57 @@ def material_nodes(mat, rgba):
 	transparent.location = (-62,155)
 	color.location = (-276,238)
 
+	###
+	# Blender Internal
+	###
+	mat.use_shadeless = True
+
+	internal = mat.node_tree.nodes.new('ShaderNodeOutput')
+
+	cy_to_bi = mat.node_tree.nodes.new('ShaderNodeMaterial')
+	cy_to_bi.material = mat
+	cy_to_bi.use_specular = False
+
+
+	mat.node_tree.links.new(cy_to_bi.outputs['Color'],internal.inputs['Color'])
+	mat.node_tree.links.new(cy_to_bi.outputs['Alpha'],internal.inputs['Alpha'])
+
+	internal.location = (307,156)
+	cy_to_bi.location = (97, 31)
+
+
+
 
 def make_text():
 	#create text objects
-	bpy.ops.object.text_add(radius=2, location=(0,0,0),rotation=(math.radians(90),0,0),layers=[True] + [False]*19)
-	bpy.data.objects['Text'].data.body = "Something"
+	bpy.ops.object.text_add(radius=2, location=(0,0,0),rotation=(math.radians(90),0,0),layers=FG_LAYER_MASK)
+	fg = bpy.context.object
+	fg.data.body = "Something"
 
-	bpy.ops.object.text_add(radius=2, location=(0,0.22,0),rotation=(math.radians(90),0,0),layers=[False]*10 + [True] + [False]*9)
-	bpy.data.objects['Text.001'].data.body = "Something"
-	bpy.data.objects['Text.001'].data.bevel_depth = 0.043	
+	bpy.ops.object.text_add(radius=2, location=(0,0.22,0),rotation=(math.radians(90),0,0),layers=BG_LAYER_MASK)
+	bg = bpy.context.object
+	bg.data.body = "Something"
+	bg.data.bevel_depth = 0.043	
 
-	#make materials for our new text objects
-	white = bpy.data.materials.new("White Text")
-	black = bpy.data.materials.new("Black Shadow")
+	white = None
+	black = None
+	for m in bpy.data.materials:
+		if m.name == "Caption White":
+			white = m
+		elif m.name == "Caption Shadow":
+			black = m
 
-	material_nodes(white,(1,1,1,1))
-	material_nodes(black,(0,0,0,1))
+	if not white:
+		white = bpy.data.materials.new("Caption White")
+		material_nodes(white,(1,1,1,1))
+		white.specular_hardness = 1
+	if not black:
+		black = bpy.data.materials.new("Caption Shadow")
+		material_nodes(black,(0,0,0,1))
+		black.diffuse_color = (0,0,0)
 
-	bpy.data.objects['Text'].data.materials.append(white)
-	bpy.data.objects['Text.001'].data.materials.append(black)
+	fg.data.materials.append(white)
+	bg.data.materials.append(black)
 
 def compositor_setup():
 	bpy.context.scene.use_nodes = True
@@ -204,8 +265,8 @@ def compositor_setup():
 	shadow_blur.location = (52,101)
 	switch.location = (228,233)
 
-	render_white.layer='Text'
-	render_black.layer='Shadow'
+	render_white.layer=FG_LAYER_NAME
+	render_black.layer=BG_LAYER_NAME
 
 	clip_size.space = 'RENDER_SIZE'
 	shadow_blur.filter_type = 'FAST_GAUSS'
@@ -227,14 +288,45 @@ def compositor_setup():
 	comp.links.new(text_mixer.outputs['Image'],clip_mixer.inputs[2])
 
 
+class CaptionOperator(bpy.types.Operator):
+	bl_idname = "object.caption"
+	bl_label = "Caption"
+	bl_options = {'REGISTER', 'UNDO'}
+
+	def execute(self, context):
+		render_settings()
+		speedup_settings()
+		setup_camera()
+		scene_layers()
+		compositor_setup()
+
+		make_text()
+
+		bpy.context.scene.render.engine = 'BLENDER_RENDER'
+
+		return {'FINISHED'}	
+
+class CaptionPanel(bpy.types.Panel):
+	bl_label = "Caption"
+	bl_idname = "OBJECT_PT_caption"
+	bl_space_type = "VIEW_3D"
+	bl_region_type = "TOOLS"
+
+	def draw(self, context):
+		layout = self.layout
+		col = layout.column(align=True)
+		row = col.row(align=True)
+		row.operator("object.caption", text = "Setup")
 
 
-delete_all()
-render_settings()
-speedup_settings()
-setup_camera()
-scene_layers()
-compositor_setup()
 
-make_text()
+def register():
+	bpy.utils.register_class(CaptionPanel)
+	bpy.utils.register_class(CaptionOperator)
+def unregister():
+	bpy.utils.unregister_class(CaptionPanel)
+	bpy.utils.unregister_class(CaptionOperator)
+
+if __name__ == "__main__":
+	register()
 
