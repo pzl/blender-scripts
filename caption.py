@@ -25,6 +25,19 @@ THE SOFTWARE.
 """
 
 
+bl_info = {
+	"name": "Captioner",
+	"description": "Easy scene setup for quick orthographic captioning (like gifs)",
+	"author": "Dan Panzarella (alsoelp@gmail.com)",
+	"version": (1, 0),
+	"blender": (2, 77, 0),
+	"location": "View3D > Tools",
+	"wiki_url": "https://github.com/pzl/blender-scripts",
+	"tracker_url": "https://github.com/pzl/blender-scripts/issues",
+	"support": "COMMUNITY",
+	"category": "Scene"
+}
+
 import bpy
 import math
 
